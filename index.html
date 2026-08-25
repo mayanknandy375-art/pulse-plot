@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PulsePlot — Real-Time Data Visualizer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+:root{--bg:#06101d;--panel:#0b1829;--panel2:#071321;--border:#1d344d;--text:#edf5ff;--muted:#8197b1;--accent:#5eead4;--blue:#60a5fa}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#143451 0,transparent 34%),var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}.app{max-width:1500px;margin:auto;padding:22px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.brand{display:flex;gap:12px;align-items:center}.logo{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--blue));color:#06111d;font-weight:900;font-size:26px}h1{font-size:22px;margin:0}.sub{font-size:12px;color:var(--muted);margin-top:3px}.status{font-size:12px;color:var(--muted)}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#64748b;margin-right:6px}.dot.live{background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.layout{display:grid;grid-template-columns:335px 1fr;gap:18px}.panel{background:#0b1829e8;border:1px solid var(--border);border-radius:18px;box-shadow:0 18px 50px #0005}.controls{padding:16px}.section{border-bottom:1px solid #193049;padding-bottom:15px;margin-bottom:15px}.section:last-child{border:0;margin:0;padding-bottom:0}.label{font-size:10px;letter-spacing:.12em;font-weight:800;color:#7f98b4;margin-bottom:8px}textarea,input,select{width:100%;background:#071321;color:var(--text);border:1px solid #28415d;border-radius:9px;padding:9px;outline:none;margin-top:5px}textarea{height:145px;resize:vertical;font:12px ui-monospace,monospace}.drop{border:1px dashed #31516f;border-radius:10px;padding:11px;text-align:center;color:#91a7bf;cursor:pointer;margin-bottom:7px}.buttons{display:flex;gap:7px;margin-top:8px}.buttons button{flex:1}button{background:#142b43;color:var(--text);border:0;border-radius:9px;padding:10px;cursor:pointer;font-weight:700}button:hover{filter:brightness(1.15)}button.primary{background:linear-gradient(135deg,var(--accent),var(--blue));color:#06111d}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:7px;color:#7891aa;font-size:11px}.fields{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}.field,.pill{font-size:10px;color:#9eb5cd;background:#11263d;border:1px solid #24405c;padding:5px 7px;border-radius:7px}
+.chartpanel{padding:16px;min-width:0}.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.toolbar h2{margin:0;font-size:18px}.toolbar p{margin:3px 0 0;color:var(--muted);font-size:12px}.chartbox{height:570px;position:relative;background:#071321;border:1px solid #1b3149;border-radius:14px;padding:12px}.empty{position:absolute;inset:0;display:grid;place-content:center;text-align:center;color:#7189a3;gap:7px;padding:25px}.empty b{font-size:18px;color:#b9c9db}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.stat{background:#091625;border:1px solid #193047;border-radius:10px;padding:10px}.stat small{display:block;color:#6f87a1;font-size:9px}.stat b{display:block;margin-top:4px;font-size:16px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.chartbox{height:430px}.stats{grid-template-columns:repeat(2,1fr)}} 
+</style>
+</head>
+<body>
+<div class="app">
+<header><div class="brand"><div class="logo">∿</div><div><h1>PulsePlot</h1><div class="sub">Real-time, data-agnostic visualization studio</div></div></div><div class="status"><span id="dot" class="dot"></span><span id="status">READY</span></div></header>
+<div class="layout">
+<aside class="panel controls">
+<div class="section"><div class="label">1 · FEED ANY DATA</div><label class="drop" for="file">Upload CSV / JSON / TSV</label><input id="file" hidden type="file" accept=".csv,.json,.tsv,.txt"><textarea id="input" placeholder="Paste CSV or JSON here..."></textarea><div class="buttons"><button class="primary" id="load">Load & Detect</button><button id="demo">Demo</button></div></div>
+<div class="section"><div class="label">2 · CHOOSE VISUALIZATION</div><select id="type"><option value="line">Line / Real-time</option><option value="scatter">Scatter / Points</option><option value="bar">Bar</option><option value="pie">Pie</option><option value="doughnut">Doughnut</option><option value="area">Area</option><option value="radar">Radar</option><option value="polarArea">Polar Area</option></select></div>
+<div class="section"><div class="label">3 · MAP FIELDS</div><div class="twocol"><div>X / Category<select id="x"></select></div><div>Y / Value<select id="y"></select></div></div><div class="fields" id="fields"></div></div>
+<div class="section"><div class="label">4 · REAL-TIME PLAYBACK</div><div class="twocol"><div>Points / tick<input id="batch" type="number" min="1" max="50" value="1"></div><div>Interval ms<input id="ms" type="number" min="20" value="350"></div></div><div class="buttons"><button class="primary" id="start">▶ Start</button><button id="stop">■ Stop</button><button id="reset">↺ Reset</button></div></div>
+<div class="section"><div class="label">EXPORT</div><div class="buttons"><button id="png">Export PNG</button><button id="csv">Export CSV</button></div></div>
+</aside>
+<main class="panel chartpanel"><div class="toolbar"><div><h2 id="title">Your visualization</h2><p>Data is rendered point-by-point in real time</p></div><span class="pill" id="columns">0 columns</span></div><div class="chartbox"><canvas id="chart"></canvas><div class="empty" id="empty"><b>Feed your data to begin</b><span>Upload/paste data → choose a chart → map fields → Start.</span></div></div><div class="stats"><div class="stat"><small>ROWS</small><b id="rows">0</b></div><div class="stat"><small>SHOWN</small><b id="shown">0</b></div><div class="stat"><small>NUMERIC FIELDS</small><b id="numeric">0</b></div><div class="stat"><small>LAST VALUE</small><b id="last">—</b></div></div></main>
+</div></div>
+<script>
+let rows=[],shown=[],chart=null,timer=null,cursor=0;
+const $=id=>document.getElementById(id),num=v=>v!==""&&v!==null&&!isNaN(Number(v))?Number(v):null;
+const demo=`time,temperature,humidity,rainfall
+00:00,24.2,82,0
+02:00,23.8,84,0
+04:00,23.5,86,0.1
+06:00,24.8,80,0
+08:00,27.1,74,0
+10:00,29.4,68,0
+12:00,31.2,61,0.2
+14:00,32,58,0.4
+16:00,31.1,60,1.1
+18:00,29,68,0.7
+20:00,27,75,0.2
+22:00,25.5,80,0`;
+function parse(t){t=t.trim();if(!t)return[];if(t[0]=="["||t[0]=="{"){let j=JSON.parse(t);if(!Array.isArray(j))j=[j];return j.map(v=>typeof v=="object"?v:{value:v})}let ls=t.split(/\r?\n/).filter(Boolean),d=ls[0].includes("\t")?"\t":",",sp=s=>s.split(d).map(v=>v.trim().replace(/^"|"$/g,"")),h=sp(ls[0]);return ls.slice(1).map(l=>{let a=sp(l),o={};h.forEach((k,i)=>o[k||"Column "+(i+1)]=a[i]??"");return o})}
+function populate(){let cs=rows.length?Object.keys(rows[0]):[],ns=cs.filter(c=>rows.some(r=>num(r[c])!==null));["x","y"].forEach(id=>$(id).innerHTML=cs.map(c=>`<option>${c}</option>`).join(""));if(cs.length){$("x").value=cs.find(c=>!ns.includes(c))||cs[0];$("y").value=ns[0]||cs[0]}$("fields").innerHTML=cs.map(c=>`<span class="field">${c} · ${ns.includes(c)?"numeric":"text"}</span>`).join("");$("columns").textContent=cs.length+" columns";$("rows").textContent=rows.length;$("numeric").textContent=ns.length}
+function load(){try{rows=parse($("input").value);shown=[];cursor=0;populate();$("empty").style.display=rows.length?"none":"grid";render()}catch(e){alert("Could not parse the data. Use CSV/TSV with headers or a JSON array of objects.")}}
+function build(){let t=$("type").value,x=$("x").value,y=$("y").value,a=shown;let d;if(["pie","doughnut","polarArea"].includes(t))d={labels:a.map(r=>String(r[x])),datasets:[{data:a.map(r=>num(r[y])??0)}]};else if(t=="scatter")d={datasets:[{label:y,data:a.map((r,i)=>({x:num(r[x])??i,y:num(r[y])??0}))}]};else d={labels:a.map(r=>String(r[x])),datasets:[{label:y,data:a.map(r=>num(r[y])??0),fill:t=="area",tension:.28,borderWidth:2}]};return d}
+function render(){if(chart)chart.destroy();if(!rows.length)return;let t=$("type").value,ct=t=="bar"? "bar":t=="pie"?"pie":t=="doughnut"?"doughnut":t=="scatter"?"scatter":t=="polarArea"?"polarArea":t=="radar"?"radar":"line";let o={responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{labels:{color:"#b9c9db"}}}};if(!["pie","doughnut","polarArea","radar"].includes(ct))o.scales={x:{ticks:{color:"#7890aa"},grid:{color:"#17304a"}},y:{ticks:{color:"#7890aa"},grid:{color:"#17304a"}}};chart=new Chart($("chart"),{type:ct,data:build(),options:o});$("title").textContent=t=="line"?"Line / Real-time":t[0].toUpperCase()+t.slice(1)+" chart";$("shown").textContent=shown.length;$("last").textContent=shown.length?shown.at(-1)[$("y").value]:"—"}
+function step(){let n=Math.min(Number($("batch").value)||1,rows.length-cursor);shown.push(...rows.slice(cursor,cursor+n));cursor+=n;render();if(cursor>=rows.length)stop()}
+function stop(){if(timer){clearInterval(timer);timer=null}$("status").textContent="READY";$("dot").className="dot"}
+$("load").onclick=load;$("demo").onclick=()=>{$("input").value=demo;load()};$("file").onchange=e=>e.target.files[0]?.text().then(t=>{$("input").value=t;load()});
+$("start").onclick=()=>{if(!rows.length)return alert("Load data first.");if(cursor>=rows.length){shown=[];cursor=0}if(timer)return;$("status").textContent="LIVE";$("dot").className="dot live";step();timer=setInterval(step,Math.max(20,Number($("ms").value)||350))};
+$("stop").onclick=stop;$("reset").onclick=()=>{stop();shown=[];cursor=0;render()};["type","x","y"].forEach(id=>$(id).onchange=render);
+$("png").onclick=()=>{if(chart){let a=document.createElement("a");a.href=chart.toBase64Image();a.download="pulseplot.png";a.click()}};
+$("csv").onclick=()=>{if(!rows.length)return;let fs=Object.keys(rows[0]),s=[fs.join(","),...rows.map(r=>fs.map(f=>`"${String(r[f]??"").replaceAll('"','""')}"`).join(","))].join("\n"),a=document.createElement("a");a.href=URL.createObjectURL(new Blob([s],{type:"text/csv"}));a.download="pulseplot-data.csv";a.click()};
+</script>
+</body>
+</html>

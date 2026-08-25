@@ -1,0 +1,14 @@
+{
+  "name": "pulseplot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time data-agnostic 2D visualization website",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}
